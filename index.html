@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>사진 보기 | QR 전용 뷰어</title>
+  <meta name="description" content="QR을 스캔하면 지정한 사진을 즉시 전체화면으로 보여주는 초간단 뷰어" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { display: grid; place-items: center; background:#0b0b0c; color:#e7e7ea; font-family: system-ui, -apple-system, Segoe UI, Roboto, Noto Sans, Apple SD Gothic Neo, sans-serif; }
+    .wrap { width: min(1200px, 100%); padding: 16px; box-sizing: border-box; }
+    .frame { position: relative; width: 100%; aspect-ratio: var(--ratio, 16/9); background:#111317; border-radius: 18px; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,.5); }
+    .media { width: 100%; height: 100%; object-fit: var(--fit, contain); display: none; }
+    .spinner { position:absolute; inset:0; display:grid; place-items:center; }
+    .spinner::after { content:""; width:56px; height:56px; border-radius:50%; border:6px solid #2f3241; border-top-color:#8b8fff; animation:spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .msg { position:absolute; inset:auto 0 0 0; background: linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,.6) 30%, rgba(0,0,0,.85) 100%); padding: 14px 16px; font-size: 14px; line-height: 1.5; }
+    .bar { display:flex; gap:10px; align-items:center; justify-content:space-between; margin-top:12px; opacity:.9; }
+    .btn { appearance:none; border:1px solid #2e3347; background:#141726; color:#e7e7ea; border-radius:12px; padding:10px 14px; cursor:pointer; font-weight:600; }
+    .btn:active { transform: translateY(1px); }
+    a { color:#b2b5ff; text-decoration:none; }
+    .tips { font-size:13px; opacity:.8; }
+    .hide { display:none !important; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="frame" id="frame" style="--fit: contain; --ratio: auto;">
+      <img id="pic" class="media" alt="QR 이미지" referrerpolicy="no-referrer" />
+      <div class="spinner" id="spinner" aria-hidden="true"></div>
+      <div class="msg" id="msg"></div>
+    </div>
+
+    <div class="bar">
+      <div class="tips">
+        URL 예시: <code>?img=https://...jpg</code>
+        · 키 사용: <code>?k=menu</code>
+        · 맞춤 옵션: <code>&fit=contain|cover</code>, <code>&ratio=3:2</code>
+      </div>
+      <div>
+        <button class="btn" id="btnFit">맞춤(Contain)</button>
+        <button class="btn" id="btnCover">채움(Cover)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // 1) 짧은 키 → 실제 이미지 URL 매핑 표 (원하는 만큼 추가/수정)
+    const MAP = {
+      sample: "https://images.unsplash.com/photo-1519681393784-d120267933ba?q=80&w=1600&auto=format&fit=crop",
+      event:  "https://images.unsplash.com/photo-1532635241-17e820acc59f?q=80&w=1600&auto=format&fit=crop",
+      menu:   "https://images.unsplash.com/photo-1542838132-92c53300491e?q=80&w=1600&auto=format&fit=crop"
+    };
+
+    // 2) 쿼리 파싱
+    const q = new URLSearchParams(location.search);
+    const imgParam = q.get('img'); // 직접 이미지 URL
+    const keyParam = q.get('k');   // 사전 정의 키
+    const fitParam = q.get('fit'); // contain | cover
+    const ratioParam = q.get('ratio'); // 예: 16:9, 3:2, auto
+
+    const pic = document.getElementById('pic');
+    const msg = document.getElementById('msg');
+    const spinner = document.getElementById('spinner');
+    const frame = document.getElementById('frame');
+    const btnFit = document.getElementById('btnFit');
+    const btnCover = document.getElementById('btnCover');
+
+    // 3) 이미지 소스 결정
+    let src = '';
+    if (imgParam) {
+      src = imgParam;
+    } else if (keyParam && MAP[keyParam]) {
+      src = MAP[keyParam];
+    }
+
+    // 4) 옵션 적용
+    if (fitParam === 'cover') frame.style.setProperty('--fit', 'cover');
+    if (ratioParam && ratioParam !== 'auto') {
+      const r = ratioParam.replace('x', ':').replace('×', ':');
+      const [w, h] = r.split(':').map(Number);
+      if (!isNaN(w) && !isNaN(h) && w > 0 && h > 0) {
+        frame.style.setProperty('--ratio', (w / h));
+      }
+    }
+
+    // 5) 로딩/오류 처리
+    function showMessage(text, extra='') {
+      msg.innerHTML = text + (extra ? `<div style="margin-top:6px">${extra}</div>` : '');
+    }
+
+    if (!src) {
+      spinner.classList.add('hide');
+      showMessage('표시할 이미지가 없습니다.','URL에 <code>?img=이미지주소</code> 또는 <code>?k=키</code>를 붙여 접속하세요.');
+    } else {
+      const a = document.createElement('a');
+      a.href = src; // 유효성 단순 체크 용도 (브라우저가 스킴 파싱)
+      pic.src = src;
+      pic.onload = () => {
+        spinner.classList.add('hide');
+        pic.style.display = 'block';
+        showMessage(`<strong>이미지 로드 완료</strong> · <a href="${src}" target="_blank" rel="noopener">원본 열기</a>`);
+      };
+      pic.onerror = () => {
+        spinner.classList.add('hide');
+        showMessage('이미지를 불러오지 못했습니다.','주소가 유효한지 또는 CORS가 허용되는지 확인하세요.');
+      };
+    }
+
+    // 6) UI 핸들러
+    btnFit.addEventListener('click', () => frame.style.setProperty('--fit', 'contain'));
+    btnCover.addEventListener('click', () => frame.style.setProperty('--fit', 'cover'));
+  </script>
+</body>
+</html>
